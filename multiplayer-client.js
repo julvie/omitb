@@ -539,6 +539,13 @@ function connectAndJoin() {
       return;
     }
 
+    if (msg.type === 'turn_revelation') {
+      if (msg.data && msg.data.text) {
+        logNote(`${msg.data.title}: ${msg.data.text}`);
+      }
+      return;
+    }
+
     if (msg.type === 'story_reveal') {
       const beat = msg.data;
       if (!state.revealedStory.some((entry) => entry.title === beat.title && entry.text === beat.text)) {

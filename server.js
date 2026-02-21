@@ -21,6 +21,57 @@ const residents = ['Lester', 'Howard', 'Uma', 'Theo', 'Bunny', 'Cinda', 'Poppy',
 const residentIds = { Lester: 'lester', Howard: 'howard', Uma: 'uma', Theo: 'theo', Bunny: 'bunny', Cinda: 'cinda', Poppy: 'poppy', Jan: 'jan' };
 const victims = ['Lester', 'Eva Kane', 'Nina Lin', 'Milo Graves', 'Vera Bell', "Theo's Agent"];
 const ringLength = 24;
+const timelineMoments = [
+  '8:42 PM blackout',
+  '9:07 PM service-elevator stop',
+  '9:31 PM hallway camera dropout',
+  '9:55 PM rooftop access ping',
+  '10:18 PM doorman log entry',
+  '10:44 PM emergency stairwell door alarm',
+];
+
+const facetReasonLibrary = {
+  suspect: {
+    Bunny: ['Bunny appears in deleted board messages sent just before the blackout.'],
+    Jan: ['Jan was seen changing route right after the camera gap started.'],
+    Cinda: ['Cinda had a source in the building and moved before public details were released.'],
+    Teddy: ['Teddy called twice during the dead zone and then erased the call log.'],
+    Howard: ['Howard flagged an odd hallway pattern before anyone reported the body.'],
+    Poppy: ['Poppy had draft notes matching details that were never public.'],
+    Donna: ['Donna pushed for a timeline change that hid a key ten-minute window.'],
+    Loretta: ['Loretta was linked to a private meeting tied to the victim.'],
+  },
+  object: {
+    'Bassoon Reed': ['The reed fibers match residue recovered during evidence sweep.'],
+    'Poisoned Dip': ['Kitchen prep timestamps place the dip in the victim timeline window.'],
+    'Podcast Mic': ['The mic auto-recorded ambient audio exactly when the lights failed.'],
+    'Knit Needle': ['The wound pattern fits a narrow puncture profile like a knit needle.'],
+    'Stage Light': ['A timed stage-light failure synchronized with the building blackout.'],
+    'Key Fob': ['A key-fob scan opened a restricted route minutes before discovery.'],
+    Matchbook: ['Smoke traces and a matchbook brand tie to the crime route.'],
+    'Broken Vase': ['Ceramic shards from the vase were found where no struggle was reported.'],
+  },
+  apartment: {
+    'Penthouse A': ['Penthouse A camera relay was interrupted during the critical minute.'],
+    'Penthouse B': ['Penthouse B visitor log has a manually altered entry.'],
+    "Sting's Loft": ["Sting's Loft access showed an unregistered pass-through."],
+    'Theater Room': ['Theater Room acoustics match the recovered background noise.'],
+    Kitchen: ['Kitchen service movement overlaps the murder window exactly.'],
+    'Wine Cellar': ['Wine Cellar lock records show an impossible double-open event.'],
+    'Security Office': ['Security Office edits created the exact blind spot investigators noticed.'],
+    Rooftop: ['Rooftop door alarm fired at the same minute as the timeline rupture.'],
+  },
+  motive: {
+    Revenge: ['Recent messages show escalating personal retaliation.'],
+    Blackmail: ['A hidden payment thread points to leverage and coercion.'],
+    Jealousy: ['Witness statements describe escalating rivalry around the victim.'],
+    Inheritance: ['Estate timing and legal pressure created immediate motive.'],
+    'Cover-up': ['The timeline edits align with evidence suppression behavior.'],
+    'Career Sabotage': ['Professional displacement plans were active before the murder night.'],
+    Obsession: ['Repeated tracking behavior shows fixation escalating to risk.'],
+    Debt: ['Debt pressure peaked the same day as the incident.'],
+  },
+};
 
 const rooms = new Map();
 const sockets = new Map();
@@ -173,7 +224,13 @@ function maybeStart(room) {
   broadcastState(room);
 }
 
-function generatePrivateClue(room) {
+function getFacetReason(facet, value) {
+  const options = facetReasonLibrary[facet] && facetReasonLibrary[facet][value];
+  if (Array.isArray(options) && options.length > 0) return randomItem(options);
+  return `${value} keeps surfacing in conflicting witness accounts.`;
+}
+
+function generatePrivateClue(room, player) {
   const facets = ['suspect', 'object', 'apartment', 'motive'];
   const facet = randomItem(facets);
   const truthful = Math.random() < 0.62;
@@ -181,18 +238,30 @@ function generatePrivateClue(room) {
     ? room.solution[facet]
     : randomItem({ suspect: suspects, object: objects, apartment: apartments, motive }[facet].filter((v) => v !== room.solution[facet]));
 
+  const turnIndex = player.cluesFound + 1;
+  const moment = timelineMoments[(turnIndex - 1) % timelineMoments.length];
+  const reason = getFacetReason(facet, value);
   const resident = randomItem(residents);
-  const text = `${resident} says ${value} is connected to tonight's timeline.`;
+  const text = `${resident} ties ${value} to ${moment}: ${reason}`;
+  const revelation = truthful
+    ? {
+        title: `Turn ${turnIndex}: Verified Thread`,
+        text: `Timeline reveal (${moment}): ${value} is relevant because ${reason}`,
+      }
+    : {
+        title: `Turn ${turnIndex}: Murky Lead`,
+        text: `Counter-claim (${moment}): ${value} is being pushed as relevant because ${reason}`,
+      };
   const encounter = Math.random() < 0.38;
   const residentQuotes = {
-    Lester: `I logged someone near the scene, and ${value} keeps showing up in my notes.`,
-    Howard: `Even Evelyn reacted when ${value} came up. That is not normal.`,
-    Uma: `Don't ignore ${value}. People lie, paper trails don't.`,
-    Theo: `I saw enough to know ${value} matters to what happened.`,
-    Bunny: `Board records tied to ${value} were touched at the wrong hour.`,
-    Cinda: `My source says ${value} is the thread nobody is pulling.`,
-    Poppy: `I clipped drafts all night. ${value} appears in every real lead.`,
-    Jan: `Listen carefully. ${value} fits the rhythm of the murder timeline.`,
+    Lester: `I logged this at ${moment}: ${reason}`,
+    Howard: `This lines up with ${moment}. ${reason}`,
+    Uma: `At ${moment}, this is what matters: ${reason}`,
+    Theo: `I can confirm the timing at ${moment}. ${reason}`,
+    Bunny: `Co-op records near ${moment} point here: ${reason}`,
+    Cinda: `My source tied ${moment} to this: ${reason}`,
+    Poppy: `Draft notes around ${moment} keep repeating it: ${reason}`,
+    Jan: `Listen to the rhythm at ${moment}. ${reason}`,
   };
   const encounterData = encounter
     ? {
@@ -202,7 +271,7 @@ function generatePrivateClue(room) {
       }
     : null;
 
-  return { facet, value, truthful, resident, text, encounter, encounterData };
+  return { facet, value, truthful, resident, text, encounter, encounterData, revelation };
 }
 
 function maybeRevealStory(room, player) {
@@ -369,8 +438,9 @@ wss.on('connection', (ws) => {
       send(ws, { type: 'roll_result', dice });
 
       player.position = (player.position + dice) % ringLength;
-      const clue = generatePrivateClue(room);
+      const clue = generatePrivateClue(room, player);
       send(ws, { type: 'private_clue', data: clue });
+      send(ws, { type: 'turn_revelation', data: clue.revelation });
       player.cluesFound += 1;
       if (clue.encounter && clue.encounterData) {
         send(ws, { type: 'resident_encounter', data: clue.encounterData });
