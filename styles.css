@@ -78,6 +78,31 @@ body {
   gap: 1.1rem;
 }
 
+.screen-hidden {
+  display: none;
+}
+
+.prejoin-shell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 1.25rem;
+}
+
+.prejoin-panel {
+  width: min(1100px, 100%);
+  border-radius: 16px;
+  border: 1px solid rgba(138, 129, 112, 0.64);
+  padding: 1.1rem;
+  box-shadow:
+    0 12px 22px rgba(0, 0, 0, 0.18),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.45);
+  background:
+    radial-gradient(circle at 91% 6%, rgba(208, 162, 79, 0.16), transparent 33%),
+    repeating-linear-gradient(0deg, rgba(28, 35, 44, 0.04) 0, rgba(28, 35, 44, 0.04) 1px, rgba(255, 255, 255, 0.2) 1px, rgba(255, 255, 255, 0.2) 5px),
+    linear-gradient(165deg, #f2ede2, #ddd6c8);
+}
+
 .panel {
   background:
     radial-gradient(circle at 91% 6%, rgba(208, 162, 79, 0.16), transparent 33%),
@@ -781,6 +806,11 @@ h1::after {
   margin-bottom: 0.7rem;
 }
 
+.character-cards--lobby {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: stretch;
+}
+
 .character-card {
   border: 1px solid rgba(139, 131, 114, 0.52);
   border-radius: 12px;
@@ -828,6 +858,12 @@ h1::after {
   overflow: hidden;
   position: relative;
   margin-bottom: 0.42rem;
+}
+
+.character-card__portrait .token-board {
+  width: 56px;
+  height: 56px;
+  margin: 0.2rem auto;
 }
 
 .portrait-svg {
@@ -1162,6 +1198,10 @@ select {
 
 @media (max-width: 1100px) {
   .app {
+    grid-template-columns: 1fr;
+  }
+
+  .character-cards--lobby {
     grid-template-columns: 1fr;
   }
 

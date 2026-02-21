@@ -18,6 +18,8 @@ const objects = ['Bassoon Reed', 'Poisoned Dip', 'Podcast Mic', 'Knit Needle', '
 const apartments = ['Penthouse A', 'Penthouse B', "Sting's Loft", 'Theater Room', 'Kitchen', 'Wine Cellar', 'Security Office', 'Rooftop'];
 const motives = ['Revenge', 'Blackmail', 'Jealousy', 'Inheritance', 'Cover-up', 'Career Sabotage', 'Obsession', 'Debt'];
 const residents = ['Lester', 'Howard', 'Uma', 'Theo', 'Bunny', 'Cinda', 'Poppy', 'Jan'];
+const residentIds = { Lester: 'lester', Howard: 'howard', Uma: 'uma', Theo: 'theo', Bunny: 'bunny', Cinda: 'cinda', Poppy: 'poppy', Jan: 'jan' };
+const victims = ['Lester', 'Eva Kane', 'Nina Lin', 'Milo Graves', 'Vera Bell', "Theo's Agent"];
 const ringLength = 24;
 
 const rooms = new Map();
@@ -40,6 +42,42 @@ function createSolution() {
   };
 }
 
+function createStory(solution) {
+  const victim = randomItem(victims);
+  const openings = [
+    `${victim} was found dead after a sudden blackout near ${solution.apartment}.`,
+    `A body turned up just outside ${solution.apartment} minutes before midnight.`,
+    `${victim} vanished during a co-op event and reappeared at ${solution.apartment}.`,
+  ];
+  const stakes = [
+    'Residents are quietly deleting messages from the night of the murder.',
+    'The board wants this case buried before sunrise.',
+    'A rival podcast is feeding the building false timelines.',
+  ];
+
+  const beat1 = {
+    title: 'Tape Restoration Complete',
+    unlockAtClues: 2,
+    revealText: `Recovered audio narrows the weapon to ${solution.object}. Someone planted earlier misinformation to push investigators off that track.`,
+  };
+  const beat2 = {
+    title: 'Security Timeline Breakthrough',
+    unlockAtClues: 4,
+    revealText: `Rebuilt camera timing isolates activity around ${solution.apartment}. A corridor segment was intentionally delayed before upload.`,
+  };
+  const beat3 = {
+    title: 'Financial Pressure Exposed',
+    unlockAtClues: 6,
+    revealText: `Hidden transfers and private messages line up with ${solution.motive}. This murder was planned, not impulsive.`,
+  };
+
+  return {
+    title: `Case: The ${solution.apartment} Silence`,
+    brief: `${randomItem(openings)} ${randomItem(stakes)}`,
+    beats: [beat1, beat2, beat3],
+  };
+}
+
 function makeRoom(roomId) {
   return {
     id: roomId,
@@ -47,6 +85,7 @@ function makeRoom(roomId) {
     started: false,
     winnerId: null,
     solution: null,
+    story: null,
     players: new Map(), // playerId -> player
     chosenCharacters: new Set(),
     turnOrder: [],
@@ -63,6 +102,7 @@ function getOrCreateRoom(roomId) {
 
 function buildPublicState(room, viewerId) {
   const turnPlayer = room.players.get(room.turnPlayerId);
+  const viewer = room.players.get(viewerId);
   return {
     roomId: room.id,
     started: room.started,
@@ -70,6 +110,8 @@ function buildPublicState(room, viewerId) {
     me: viewerId,
     turnPlayerId: room.turnPlayerId,
     turnPlayerName: turnPlayer ? turnPlayer.name : null,
+    caseStory: room.story ? { title: room.story.title, brief: room.story.brief } : null,
+    revealedStory: viewer ? viewer.revealedStory : [],
     players: Array.from(room.players.values()).map((p) => ({
       id: p.id,
       name: p.name,
@@ -119,9 +161,15 @@ function maybeStart(room) {
   if (!fullyChosen) return;
   room.started = true;
   room.solution = createSolution();
+  room.story = createStory(room.solution);
+  for (const player of room.players.values()) {
+    player.cluesFound = 0;
+    player.storyRevealIndex = 0;
+    player.revealedStory = [];
+  }
   room.turnOrder = Array.from(room.players.values()).map((p) => p.id);
   room.turnPlayerId = room.turnOrder[0] || null;
-  broadcast(room, { type: 'game_started' });
+  broadcast(room, { type: 'game_started', caseStory: { title: room.story.title, brief: room.story.brief } });
   broadcastState(room);
 }
 
@@ -135,8 +183,38 @@ function generatePrivateClue(room) {
 
   const resident = randomItem(residents);
   const text = `${resident} says ${value} is connected to tonight's timeline.`;
+  const encounter = Math.random() < 0.38;
+  const residentQuotes = {
+    Lester: `I logged someone near the scene, and ${value} keeps showing up in my notes.`,
+    Howard: `Even Evelyn reacted when ${value} came up. That is not normal.`,
+    Uma: `Don't ignore ${value}. People lie, paper trails don't.`,
+    Theo: `I saw enough to know ${value} matters to what happened.`,
+    Bunny: `Board records tied to ${value} were touched at the wrong hour.`,
+    Cinda: `My source says ${value} is the thread nobody is pulling.`,
+    Poppy: `I clipped drafts all night. ${value} appears in every real lead.`,
+    Jan: `Listen carefully. ${value} fits the rhythm of the murder timeline.`,
+  };
+  const encounterData = encounter
+    ? {
+        residentId: residentIds[resident] || 'lester',
+        residentName: resident,
+        quote: residentQuotes[resident] || `${resident} says ${value} matters.`,
+      }
+    : null;
 
-  return { facet, value, truthful, resident, text, encounter: Math.random() < 0.38 };
+  return { facet, value, truthful, resident, text, encounter, encounterData };
+}
+
+function maybeRevealStory(room, player) {
+  if (!room.story) return;
+  while (player.storyRevealIndex < room.story.beats.length) {
+    const nextBeat = room.story.beats[player.storyRevealIndex];
+    if (player.cluesFound < nextBeat.unlockAtClues) break;
+    const reveal = { title: nextBeat.title, text: nextBeat.revealText };
+    player.storyRevealIndex += 1;
+    player.revealedStory.push(reveal);
+    send(player.ws, { type: 'story_reveal', data: reveal });
+  }
 }
 
 function serveFile(req, res, targetPath) {
@@ -214,12 +292,18 @@ wss.on('connection', (ws) => {
           connected: true,
           hasAccused: false,
           eliminated: false,
+          cluesFound: 0,
+          storyRevealIndex: 0,
+          revealedStory: [],
           ws,
         };
         room.players.set(player.id, player);
       } else {
         player.connected = true;
         player.ws = ws;
+        if (!Array.isArray(player.revealedStory)) player.revealedStory = [];
+        if (!Number.isInteger(player.storyRevealIndex)) player.storyRevealIndex = player.revealedStory.length;
+        if (!Number.isInteger(player.cluesFound)) player.cluesFound = 0;
       }
 
       meta.roomId = roomId;
@@ -287,6 +371,11 @@ wss.on('connection', (ws) => {
       player.position = (player.position + dice) % ringLength;
       const clue = generatePrivateClue(room);
       send(ws, { type: 'private_clue', data: clue });
+      player.cluesFound += 1;
+      if (clue.encounter && clue.encounterData) {
+        send(ws, { type: 'resident_encounter', data: clue.encounterData });
+      }
+      maybeRevealStory(room, player);
       room.turnPlayerId = nextTurnPlayer(room);
       broadcastState(room);
       return;

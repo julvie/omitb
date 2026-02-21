@@ -13,10 +13,12 @@
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <main class="app" style="grid-template-columns: 340px 1fr 360px">
-      <section class="panel left-panel">
+    <section id="lobbyScreen" class="prejoin-shell">
+      <div class="prejoin-panel">
         <h1>Only Murders</h1>
-        <h2>Online Room</h2>
+        <h2>Online Lobby</h2>
+        <p class="story-brief">Step 1: Join the room, share the link, and lock your investigator before the others do.</p>
+
         <label for="nameInput">Your Name</label>
         <input id="nameInput" type="text" placeholder="Enter name" style="width:100%;padding:0.55rem;border-radius:8px;border:1px solid rgba(117,128,140,.42);margin-bottom:.5rem" />
         <button id="joinBtn" class="btn">Join / Create Room</button>
@@ -24,8 +26,19 @@
         <p id="shareLink" class="story-brief" style="word-break: break-all;"></p>
 
         <h2>Pick Character</h2>
-        <div id="characterPick" class="character-cards"></div>
+        <div id="characterPick" class="character-cards character-cards--lobby"></div>
+      </div>
+    </section>
 
+    <main id="gameScreen" class="app screen-hidden" style="grid-template-columns: 340px 1fr 360px">
+      <section class="panel left-panel">
+        <h2>Case Story</h2>
+        <h3 id="caseTitle">Awaiting Case File</h3>
+        <p id="caseBrief" class="story-brief">Lock all three investigators to start the mystery.</p>
+        <div>
+          <h3>Developing Story</h3>
+          <ul id="storyBeats" class="hints"></ul>
+        </div>
         <div class="case-notes-block">
           <h2>Your Case Notes</h2>
           <ul id="notes" class="log"></ul>
@@ -69,6 +82,25 @@
         <select id="motiveSel"></select>
         <button id="submitAccuse" class="btn danger">Submit</button>
         <button id="cancelAccuse" class="btn secondary">Cancel</button>
+      </div>
+    </div>
+
+    <div id="storyRevealModal" class="modal-backdrop story-reveal-backdrop hidden" aria-hidden="true">
+      <div class="modal-card story-reveal-card" role="dialog" aria-modal="true">
+        <p class="story-reveal-kicker">Developing Story</p>
+        <h2 id="storyRevealTitle">Story Twist</h2>
+        <p id="storyRevealText" class="story-reveal-text"></p>
+        <button id="storyRevealBtn" class="btn">Continue Investigation</button>
+      </div>
+    </div>
+
+    <div id="residentModal" class="modal-backdrop resident-backdrop hidden" aria-hidden="true">
+      <div class="modal-card resident-card" role="dialog" aria-modal="true">
+        <p class="resident-kicker">Resident Encounter</p>
+        <h2 id="residentTitle">Resident</h2>
+        <div id="residentPortrait" class="resident-portrait"></div>
+        <p id="residentQuote" class="resident-quote"></p>
+        <button id="residentContinueBtn" class="btn">Continue</button>
       </div>
     </div>
 
