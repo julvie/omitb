@@ -13,6 +13,8 @@ const state = {
   playerId: null,
   started: false,
   winnerId: null,
+  turnPlayerId: null,
+  turnPlayerName: null,
   players: [],
   chosenCharacters: [],
   me: null,
@@ -152,7 +154,8 @@ function renderPlayers() {
     const left = document.createElement('span');
     left.textContent = `${p.name} ${p.characterId ? `(${p.characterId})` : '(choosing...)'}`;
     const right = document.createElement('span');
-    right.textContent = p.connected ? 'Online' : 'Offline';
+    const turnTag = p.id === state.turnPlayerId ? ' • TURN' : '';
+    right.textContent = `${p.connected ? 'Online' : 'Offline'}${turnTag}`;
     li.append(left, right);
     els.playersList.appendChild(li);
   });
@@ -225,10 +228,19 @@ function renderStatus() {
     const winner = state.players.find((p) => p.id === state.winnerId);
     els.status.textContent = `Case closed. Winner: ${winner ? winner.name : 'Unknown'}.`;
   } else {
-    els.status.textContent = 'Game live. Roll to move and collect private clues.';
+    const mine = state.turnPlayerId === state.playerId;
+    els.status.textContent = mine
+      ? 'Your turn. Roll now.'
+      : `Waiting for ${state.turnPlayerName || 'current player'} to roll.`;
   }
 
-  els.rollBtn.disabled = !state.started || !!state.winnerId || state.isRolling || !state.me || !state.me.characterId;
+  els.rollBtn.disabled =
+    !state.started ||
+    !!state.winnerId ||
+    state.isRolling ||
+    !state.me ||
+    !state.me.characterId ||
+    state.turnPlayerId !== state.playerId;
   els.accuseBtn.disabled = !state.started || !!state.winnerId || !state.me || !state.me.characterId;
 }
 
@@ -281,9 +293,29 @@ function connectAndJoin() {
       state.roomId = msg.data.roomId;
       state.started = msg.data.started;
       state.winnerId = msg.data.winnerId;
+      state.turnPlayerId = msg.data.turnPlayerId;
+      state.turnPlayerName = msg.data.turnPlayerName;
       state.players = msg.data.players;
       state.chosenCharacters = msg.data.chosenCharacters;
+      if (state.turnPlayerId !== state.playerId) {
+        state.isRolling = false;
+      }
       render();
+      return;
+    }
+
+    if (msg.type === 'roll_result') {
+      const result = Number(msg.dice);
+      const cube = document.getElementById('dieCube');
+      if (cube) cube.classList.remove('rolling');
+      if (Number.isInteger(result) && result >= 1 && result <= 6) {
+        setDieFace(result);
+        els.diceText.textContent = `Moved ${result}`;
+      } else {
+        els.diceText.textContent = 'Moved';
+      }
+      state.isRolling = false;
+      renderStatus();
       return;
     }
 
@@ -323,6 +355,11 @@ function connectAndJoin() {
 
     if (msg.type === 'error') {
       logNote(`Error: ${msg.message}`);
+      state.isRolling = false;
+      const cube = document.getElementById('dieCube');
+      if (cube) cube.classList.remove('rolling');
+      els.diceText.textContent = 'Ready';
+      renderStatus();
     }
   });
 
@@ -369,7 +406,6 @@ els.rollBtn.addEventListener('click', () => {
   state.isRolling = true;
   els.diceText.textContent = 'Rolling...';
 
-  const result = Math.floor(Math.random() * 6) + 1;
   const cube = document.getElementById('dieCube');
   if (cube) {
     cube.classList.add('rolling');
@@ -377,12 +413,7 @@ els.rollBtn.addEventListener('click', () => {
   }
 
   setTimeout(() => {
-    if (cube) cube.classList.remove('rolling');
-    setDieFace(result);
-    els.diceText.textContent = `Moved ${result}`;
-    send({ type: 'roll_move', dice: result });
-    state.isRolling = false;
-    renderStatus();
+    send({ type: 'roll_move' });
   }, 1000);
 });
 

@@ -49,6 +49,8 @@ function makeRoom(roomId) {
     solution: null,
     players: new Map(), // playerId -> player
     chosenCharacters: new Set(),
+    turnOrder: [],
+    turnPlayerId: null,
   };
 }
 
@@ -60,11 +62,14 @@ function getOrCreateRoom(roomId) {
 }
 
 function buildPublicState(room, viewerId) {
+  const turnPlayer = room.players.get(room.turnPlayerId);
   return {
     roomId: room.id,
     started: room.started,
     winnerId: room.winnerId,
     me: viewerId,
+    turnPlayerId: room.turnPlayerId,
+    turnPlayerName: turnPlayer ? turnPlayer.name : null,
     players: Array.from(room.players.values()).map((p) => ({
       id: p.id,
       name: p.name,
@@ -76,6 +81,17 @@ function buildPublicState(room, viewerId) {
     chosenCharacters: Array.from(room.chosenCharacters),
     characterPool: characters,
   };
+}
+
+function nextTurnPlayer(room) {
+  if (room.turnOrder.length === 0) return null;
+  const currentIndex = Math.max(0, room.turnOrder.indexOf(room.turnPlayerId));
+  for (let i = 1; i <= room.turnOrder.length; i += 1) {
+    const candidateId = room.turnOrder[(currentIndex + i) % room.turnOrder.length];
+    const candidate = room.players.get(candidateId);
+    if (candidate && candidate.characterId && candidate.connected) return candidateId;
+  }
+  return room.turnPlayerId;
 }
 
 function send(ws, payload) {
@@ -102,6 +118,8 @@ function maybeStart(room) {
   if (!fullyChosen) return;
   room.started = true;
   room.solution = createSolution();
+  room.turnOrder = Array.from(room.players.values()).map((p) => p.id);
+  room.turnPlayerId = room.turnOrder[0] || null;
   broadcast(room, { type: 'game_started' });
   broadcastState(room);
 }
@@ -252,14 +270,19 @@ wss.on('connection', (ws) => {
     if (msg.type === 'roll_move') {
       if (!room.started || room.winnerId) return;
       if (!player.characterId) return;
-      const dice = Number(msg.dice);
-      if (!Number.isInteger(dice) || dice < 1 || dice > 6) return;
+      if (room.turnPlayerId !== player.id) {
+        send(ws, { type: 'error', message: "Not your turn." });
+        return;
+      }
+
+      const dice = Math.floor(Math.random() * 6) + 1;
+      send(ws, { type: 'roll_result', dice });
 
       player.position = (player.position + dice) % ringLength;
-      broadcastState(room);
-
       const clue = generatePrivateClue(room);
       send(ws, { type: 'private_clue', data: clue });
+      room.turnPlayerId = nextTurnPlayer(room);
+      broadcastState(room);
       return;
     }
 
@@ -297,6 +320,9 @@ wss.on('connection', (ws) => {
 
     player.connected = false;
     player.ws = null;
+    if (room.started && !room.winnerId && room.turnPlayerId === player.id) {
+      room.turnPlayerId = nextTurnPlayer(room);
+    }
     broadcastState(room);
   });
 });
