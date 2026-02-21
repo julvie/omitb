@@ -7,6 +7,33 @@ const ringTiles = [
   'Lobby','Podcast Studio','Penthouse A','Rooftop','Penthouse B','East Hall','Freight Lift','Theater Room','Catacombs','Laundry','Kitchen','Wine Cellar','Security Office','Storage','West Hall',"Sting's Loft",'Courtyard','Library','Doorman Desk','Boiler Room','Art Studio','Hidden Passage','Mail Room','Arcatacombs'
 ];
 
+const characterProfiles = [
+  {
+    id: 'mabel',
+    name: 'Mabel',
+    role: 'Pattern Seeker',
+    ability: 'Reads motive shifts from inconsistent testimony.',
+    signature: 'Needlepoint Grid',
+    stats: { logic: 4, charm: 3, nerve: 5 },
+  },
+  {
+    id: 'charles',
+    name: 'Charles',
+    role: 'Forensic Mind',
+    ability: 'Weights evidence reliability better than most.',
+    signature: 'Brazzos Recall',
+    stats: { logic: 5, charm: 2, nerve: 4 },
+  },
+  {
+    id: 'oliver',
+    name: 'Oliver',
+    role: 'Director',
+    ability: 'Spots hidden social links in the building.',
+    signature: 'Producer Instinct',
+    stats: { logic: 2, charm: 5, nerve: 3 },
+  },
+];
+
 const state = {
   ws: null,
   roomId: null,
@@ -19,6 +46,13 @@ const state = {
   chosenCharacters: [],
   me: null,
   isRolling: false,
+  caseStory: null,
+  revealedStory: [],
+  storyTypeTimer: null,
+  storyTypeText: '',
+  storyTypeIndex: 0,
+  isStoryRevealActive: false,
+  isEncounterModalActive: false,
   myScores: {
     suspect: Object.fromEntries(suspects.map((x) => [x, 0])),
     object: Object.fromEntries(objects.map((x) => [x, 0])),
@@ -28,11 +62,16 @@ const state = {
 };
 
 const els = {
+  lobbyScreen: document.getElementById('lobbyScreen'),
+  gameScreen: document.getElementById('gameScreen'),
   nameInput: document.getElementById('nameInput'),
   joinBtn: document.getElementById('joinBtn'),
   roomInfo: document.getElementById('roomInfo'),
   shareLink: document.getElementById('shareLink'),
   characterPick: document.getElementById('characterPick'),
+  caseTitle: document.getElementById('caseTitle'),
+  caseBrief: document.getElementById('caseBrief'),
+  storyBeats: document.getElementById('storyBeats'),
   notes: document.getElementById('notes'),
   board: document.getElementById('board'),
   playersList: document.getElementById('playersList'),
@@ -49,6 +88,15 @@ const els = {
   submitAccuse: document.getElementById('submitAccuse'),
   cancelAccuse: document.getElementById('cancelAccuse'),
   dieView: document.getElementById('dieView'),
+  storyRevealModal: document.getElementById('storyRevealModal'),
+  storyRevealTitle: document.getElementById('storyRevealTitle'),
+  storyRevealText: document.getElementById('storyRevealText'),
+  storyRevealBtn: document.getElementById('storyRevealBtn'),
+  residentModal: document.getElementById('residentModal'),
+  residentTitle: document.getElementById('residentTitle'),
+  residentPortrait: document.getElementById('residentPortrait'),
+  residentQuote: document.getElementById('residentQuote'),
+  residentContinueBtn: document.getElementById('residentContinueBtn'),
 };
 
 function logNote(text) {
@@ -56,6 +104,100 @@ function logNote(text) {
   item.className = 'current-note';
   item.textContent = text;
   els.notes.prepend(item);
+}
+
+function clearStoryTypeTimer() {
+  if (state.storyTypeTimer) {
+    window.clearTimeout(state.storyTypeTimer);
+    state.storyTypeTimer = null;
+  }
+}
+
+function typeStoryText() {
+  if (!state.isStoryRevealActive) return;
+  if (state.storyTypeIndex >= state.storyTypeText.length) {
+    clearStoryTypeTimer();
+    els.storyRevealBtn.textContent = 'Continue Investigation';
+    return;
+  }
+  state.storyTypeIndex += 1;
+  els.storyRevealText.textContent = state.storyTypeText.slice(0, state.storyTypeIndex);
+  state.storyTypeTimer = window.setTimeout(typeStoryText, 16 + Math.floor(Math.random() * 24));
+}
+
+function showStoryReveal(beat) {
+  state.isStoryRevealActive = true;
+  state.storyTypeText = beat.text || '';
+  state.storyTypeIndex = 0;
+  els.storyRevealTitle.textContent = beat.title || 'Developing Story';
+  els.storyRevealText.textContent = '';
+  els.storyRevealBtn.textContent = 'Skip';
+  els.storyRevealModal.classList.remove('hidden');
+  els.storyRevealModal.setAttribute('aria-hidden', 'false');
+  clearStoryTypeTimer();
+  typeStoryText();
+}
+
+function closeStoryReveal() {
+  if (!state.isStoryRevealActive) return;
+  if (state.storyTypeIndex < state.storyTypeText.length) {
+    clearStoryTypeTimer();
+    state.storyTypeIndex = state.storyTypeText.length;
+    els.storyRevealText.textContent = state.storyTypeText;
+    els.storyRevealBtn.textContent = 'Continue Investigation';
+    return;
+  }
+  clearStoryTypeTimer();
+  state.isStoryRevealActive = false;
+  els.storyRevealModal.classList.add('hidden');
+  els.storyRevealModal.setAttribute('aria-hidden', 'true');
+  renderStatus();
+}
+
+function getResidentPortraitSvg(residentId) {
+  const themes = {
+    lester: { paper: '#d7c7a8', ink: '#25313d', accent: '#6e5b3a' },
+    howard: { paper: '#d8c8ab', ink: '#252d36', accent: '#73566b' },
+    uma: { paper: '#d5c2a1', ink: '#2f3139', accent: '#7a4f46' },
+    theo: { paper: '#d1bea0', ink: '#233442', accent: '#506a78' },
+    bunny: { paper: '#d6c19d', ink: '#2f3036', accent: '#7c5d3b' },
+    cinda: { paper: '#d8c7aa', ink: '#253041', accent: '#664d6d' },
+    poppy: { paper: '#d4bf9a', ink: '#2a3441', accent: '#607387' },
+    jan: { paper: '#d3bfa0', ink: '#2a3040', accent: '#6b4b5a' },
+  };
+  const t = themes[residentId] || themes.lester;
+  return `<svg viewBox="0 0 210 160" class="resident-portrait-svg" aria-hidden="true">
+      <rect width="210" height="160" fill="${t.paper}"/>
+      <rect x="10" y="10" width="190" height="140" rx="10" fill="none" stroke="${t.ink}" stroke-width="1.8"/>
+      <circle cx="84" cy="68" r="28" fill="#efc9b2" stroke="${t.ink}" stroke-width="1.4"/>
+      <path d="M56 66c0-18 12-30 28-30s28 12 28 30c-10-7-18-10-28-10s-18 3-28 10z" fill="#2c2a2b"/>
+      <path d="M57 112c4-18 14-28 27-28s23 10 27 28" fill="${t.accent}" opacity="0.86"/>
+      <circle cx="76" cy="70" r="2" fill="#16191c"/><circle cx="92" cy="70" r="2" fill="#16191c"/>
+      <path d="M76 83c5 3 11 3 16 0" stroke="#8a5e4b" stroke-width="2" fill="none" stroke-linecap="round"/>
+    </svg>`;
+}
+
+function showResidentEncounterModal(data) {
+  state.isEncounterModalActive = true;
+  els.residentTitle.textContent = data.residentName || 'Resident';
+  els.residentPortrait.innerHTML = getResidentPortraitSvg(data.residentId);
+  els.residentQuote.textContent = data.quote || '';
+  els.residentModal.classList.remove('hidden');
+  els.residentModal.setAttribute('aria-hidden', 'false');
+  renderStatus();
+}
+
+function closeResidentEncounterModal() {
+  state.isEncounterModalActive = false;
+  els.residentModal.classList.add('hidden');
+  els.residentModal.setAttribute('aria-hidden', 'true');
+  renderStatus();
+}
+
+function updateScreenMode() {
+  const pickedCharacter = !!(state.me && state.me.characterId);
+  els.lobbyScreen.classList.toggle('screen-hidden', pickedCharacter);
+  els.gameScreen.classList.toggle('screen-hidden', !pickedCharacter);
 }
 
 function randomId(length = 6) {
@@ -163,20 +305,35 @@ function renderPlayers() {
 }
 
 function renderCharacters() {
-  const pool = [
-    { id: 'mabel', name: 'Mabel' },
-    { id: 'charles', name: 'Charles' },
-    { id: 'oliver', name: 'Oliver' },
-  ];
   els.characterPick.innerHTML = '';
 
-  pool.forEach((c) => {
+  characterProfiles.forEach((c) => {
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'character-card';
     const taken = state.chosenCharacters.includes(c.id) && (!state.me || state.me.characterId !== c.id);
+    const mine = !!(state.me && state.me.characterId === c.id);
     btn.disabled = taken || state.started;
-    btn.innerHTML = `<div class="character-card__header"><span class="token-mini">${getTokenSvg(c.id)}</span><div class="character-card__titles"><strong>${c.name}</strong><small>${taken ? 'Taken' : 'Available'}</small></div></div>`;
+    if (mine) btn.classList.add('active');
+    const status = mine ? 'Locked by you' : (taken ? 'Taken' : 'Available');
+    btn.innerHTML = `
+      <div class="character-card__header">
+        <span class="token-mini">${getTokenSvg(c.id)}</span>
+        <div class="character-card__titles">
+          <strong>${c.name}</strong>
+          <small>${c.role} • ${status}</small>
+        </div>
+      </div>
+      <div class="character-card__portrait">
+        <span class="token-board">${getTokenSvg(c.id)}</span>
+        <span class="portrait-label">${c.signature}</span>
+      </div>
+      <div class="character-card__stats">
+        <span>L ${c.stats.logic}</span><span>C ${c.stats.charm}</span><span>N ${c.stats.nerve}</span>
+      </div>
+      <p class="character-card__ability">${c.ability}</p>
+      <div class="character-card__footer">Signature: ${c.signature}</div>
+    `;
     btn.addEventListener('click', () => {
       send({ type: 'choose_character', characterId: c.id });
     });
@@ -219,6 +376,17 @@ function renderEvidence() {
   });
 }
 
+function renderStory() {
+  els.caseTitle.textContent = state.caseStory ? state.caseStory.title : 'Awaiting Case File';
+  els.caseBrief.textContent = state.caseStory ? state.caseStory.brief : 'Lock all three investigators to start the mystery.';
+  els.storyBeats.innerHTML = '';
+  state.revealedStory.forEach((beat) => {
+    const item = document.createElement('li');
+    item.textContent = beat.text;
+    els.storyBeats.appendChild(item);
+  });
+}
+
 function renderStatus() {
   if (!state.roomId) {
     els.status.textContent = 'Join a room to begin.';
@@ -241,19 +409,30 @@ function renderStatus() {
     !state.started ||
     !!state.winnerId ||
     state.isRolling ||
+    state.isStoryRevealActive ||
+    state.isEncounterModalActive ||
     !state.me ||
     !state.me.characterId ||
     !!state.me.eliminated ||
     state.turnPlayerId !== state.playerId;
-  els.accuseBtn.disabled = !state.started || !!state.winnerId || !state.me || !state.me.characterId || !!state.me.eliminated;
+  els.accuseBtn.disabled =
+    !state.started ||
+    !!state.winnerId ||
+    state.isStoryRevealActive ||
+    state.isEncounterModalActive ||
+    !state.me ||
+    !state.me.characterId ||
+    !!state.me.eliminated;
 }
 
 function render() {
   state.me = state.players.find((p) => p.id === state.playerId) || null;
+  updateScreenMode();
   renderStatus();
   renderPlayers();
   renderCharacters();
   renderBoard();
+  renderStory();
   renderEvidence();
 }
 
@@ -267,6 +446,19 @@ function connectAndJoin() {
   const roomFromUrl = params.get('room');
   const roomId = (roomFromUrl || randomId(6)).toUpperCase();
   const name = (els.nameInput.value || 'Player').trim().slice(0, 24) || 'Player';
+  state.caseStory = null;
+  state.revealedStory = [];
+  state.players = [];
+  state.chosenCharacters = [];
+  state.winnerId = null;
+  state.started = false;
+  state.isStoryRevealActive = false;
+  state.isEncounterModalActive = false;
+  clearStoryTypeTimer();
+  els.storyRevealModal.classList.add('hidden');
+  els.storyRevealModal.setAttribute('aria-hidden', 'true');
+  els.residentModal.classList.add('hidden');
+  els.residentModal.setAttribute('aria-hidden', 'true');
 
   const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
   const ws = new WebSocket(`${protocol}//${location.host}`);
@@ -301,6 +493,8 @@ function connectAndJoin() {
       state.turnPlayerName = msg.data.turnPlayerName;
       state.players = msg.data.players;
       state.chosenCharacters = msg.data.chosenCharacters;
+      state.caseStory = msg.data.caseStory || null;
+      state.revealedStory = msg.data.revealedStory || [];
       if (state.turnPlayerId !== state.playerId) {
         state.isRolling = false;
       }
@@ -324,6 +518,7 @@ function connectAndJoin() {
     }
 
     if (msg.type === 'game_started') {
+      if (msg.caseStory) state.caseStory = msg.caseStory;
       logNote('Game started. All character picks are locked.');
       render();
       return;
@@ -341,6 +536,21 @@ function connectAndJoin() {
         logNote(`Resident encounter: ${clue.resident} shared private context.`);
       }
       renderEvidence();
+      return;
+    }
+
+    if (msg.type === 'story_reveal') {
+      const beat = msg.data;
+      if (!state.revealedStory.some((entry) => entry.title === beat.title && entry.text === beat.text)) {
+        state.revealedStory.push(beat);
+      }
+      showStoryReveal(beat);
+      renderStory();
+      return;
+    }
+
+    if (msg.type === 'resident_encounter') {
+      showResidentEncounterModal(msg.data || {});
       return;
     }
 
@@ -434,6 +644,7 @@ els.rollBtn.addEventListener('click', () => {
 });
 
 els.accuseBtn.addEventListener('click', () => {
+  if (state.isStoryRevealActive || state.isEncounterModalActive) return;
   els.accuseModal.classList.remove('hidden');
 });
 els.cancelAccuse.addEventListener('click', () => {
@@ -451,6 +662,8 @@ els.submitAccuse.addEventListener('click', () => {
   });
   els.accuseModal.classList.add('hidden');
 });
+els.storyRevealBtn.addEventListener('click', closeStoryReveal);
+els.residentContinueBtn.addEventListener('click', closeResidentEncounterModal);
 
 setOptions(els.suspectSel, suspects);
 setOptions(els.objectSel, objects);
