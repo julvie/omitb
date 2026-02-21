@@ -66,6 +66,8 @@ const state = {
   },
 };
 
+const SESSION_KEY = 'omb_multiplayer_session_v1';
+
 const els = {
   lobbyScreen: document.getElementById('lobbyScreen'),
   gameScreen: document.getElementById('gameScreen'),
@@ -203,6 +205,29 @@ function updateScreenMode() {
   const pickedCharacter = !!(state.me && state.me.characterId);
   els.lobbyScreen.classList.toggle('screen-hidden', pickedCharacter);
   els.gameScreen.classList.toggle('screen-hidden', !pickedCharacter);
+}
+
+function loadSession() {
+  try {
+    const raw = window.localStorage.getItem(SESSION_KEY);
+    if (!raw) return null;
+    const data = JSON.parse(raw);
+    if (!data || typeof data !== 'object') return null;
+    return data;
+  } catch {
+    return null;
+  }
+}
+
+function saveSession() {
+  try {
+    const payload = {
+      roomId: state.roomId || null,
+      playerId: state.playerId || null,
+      playerName: state.playerName || null,
+    };
+    window.localStorage.setItem(SESSION_KEY, JSON.stringify(payload));
+  } catch {}
 }
 
 function clearReconnectTimer() {
@@ -474,14 +499,17 @@ function connectAndJoin(options = {}) {
   const { reuseStored = false, isReconnect = false } = options;
   if (state.ws && (state.ws.readyState === 0 || state.ws.readyState === 1)) return;
 
+  const stored = loadSession();
+
   const params = new URLSearchParams(location.search);
   const roomFromUrl = params.get('room');
   const roomId = reuseStored
-    ? state.roomId
+    ? (state.roomId || (stored && stored.roomId) || roomFromUrl || '').toUpperCase()
     : (roomFromUrl || randomId(6)).toUpperCase();
   const name = reuseStored
-    ? state.playerName
+    ? (state.playerName || (stored && stored.playerName) || '')
     : ((els.nameInput.value || 'Player').trim().slice(0, 24) || 'Player');
+  const requestedPlayerId = reuseStored ? (state.playerId || (stored && stored.playerId) || null) : null;
   if (!roomId || !name) return;
 
   state.playerName = name;
@@ -509,7 +537,7 @@ function connectAndJoin(options = {}) {
   ws.addEventListener('open', () => {
     clearReconnectTimer();
     state.reconnectAttempts = 0;
-    send({ type: 'join', roomId, name });
+    send({ type: 'join', roomId, name, playerId: requestedPlayerId });
   });
 
   ws.addEventListener('message', (event) => {
@@ -518,6 +546,7 @@ function connectAndJoin(options = {}) {
     if (msg.type === 'joined') {
       state.roomId = msg.roomId;
       state.playerId = msg.playerId;
+      saveSession();
       const link = `${location.origin}/?room=${msg.roomId}`;
       els.roomInfo.textContent = `Room: ${msg.roomId}`;
       els.shareLink.textContent = `Share this link with 2 more players: ${link}`;
@@ -540,6 +569,7 @@ function connectAndJoin(options = {}) {
       state.caseStory = msg.data.caseStory || null;
       state.revealedStory = msg.data.revealedStory || [];
       state.revealedBackstory = msg.data.revealedBackstory || [];
+      saveSession();
       if (state.turnPlayerId !== state.playerId) {
         state.isRolling = false;
       }
@@ -740,9 +770,17 @@ setOptions(els.motiveSel, motives);
 setupDiceVisual();
 render();
 
+const bootSession = loadSession();
+if (bootSession && !els.nameInput.value) {
+  els.nameInput.value = bootSession.playerName || '';
+}
+if (bootSession && bootSession.roomId && !new URLSearchParams(location.search).get('room')) {
+  history.replaceState(null, '', `/?room=${bootSession.roomId}`);
+}
+
 if (new URLSearchParams(location.search).get('room')) {
   state.shouldAutoReconnect = true;
-  connectAndJoin();
+  connectAndJoin({ reuseStored: !!bootSession });
 }
 
 window.addEventListener('beforeunload', () => {

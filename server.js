@@ -382,14 +382,19 @@ wss.on('connection', (ws) => {
     if (msg.type === 'join') {
       const roomId = String(msg.roomId || randomId(6)).toUpperCase();
       const name = String(msg.name || 'Player').trim().slice(0, 24) || 'Player';
+      const requestedPlayerId = String(msg.playerId || '').trim();
       const room = getOrCreateRoom(roomId);
 
-      if (room.players.size >= 3 && !Array.from(room.players.values()).some((p) => !p.connected)) {
+      const byId = requestedPlayerId ? room.players.get(requestedPlayerId) : null;
+      const byNameDisconnected = Array.from(room.players.values()).find((p) => p.name === name && !p.connected);
+      const reclaimCandidate = byId || byNameDisconnected;
+
+      if (room.players.size >= 3 && !reclaimCandidate && !Array.from(room.players.values()).some((p) => !p.connected)) {
         send(ws, { type: 'error', message: 'Room is full.' });
         return;
       }
 
-      let player = Array.from(room.players.values()).find((p) => p.name === name && !p.connected);
+      let player = reclaimCandidate;
       if (!player) {
         const playerId = randomId(8);
         player = {
@@ -409,8 +414,13 @@ wss.on('connection', (ws) => {
         };
         room.players.set(player.id, player);
       } else {
+        if (player.ws && player.ws !== ws && player.ws.readyState === 1) {
+          send(player.ws, { type: 'error', message: 'Session moved to a new connection.' });
+          try { player.ws.close(); } catch {}
+        }
         player.connected = true;
         player.ws = ws;
+        player.name = name;
         if (!Array.isArray(player.revealedStory)) player.revealedStory = [];
         if (!Number.isInteger(player.storyRevealIndex)) player.storyRevealIndex = player.revealedStory.length;
         if (!Array.isArray(player.revealedBackstory)) player.revealedBackstory = [];
@@ -540,6 +550,7 @@ wss.on('connection', (ws) => {
     if (!room) return;
     const player = room.players.get(meta.playerId);
     if (!player) return;
+    if (player.ws !== ws) return;
 
     player.connected = false;
     player.ws = null;
