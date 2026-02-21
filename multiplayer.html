@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Only Murders Multiplayer</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Work+Sans:wght@400;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app" style="grid-template-columns: 340px 1fr 360px">
+      <section class="panel left-panel">
+        <h1>Only Murders</h1>
+        <h2>Online Room</h2>
+        <label for="nameInput">Your Name</label>
+        <input id="nameInput" type="text" placeholder="Enter name" style="width:100%;padding:0.55rem;border-radius:8px;border:1px solid rgba(117,128,140,.42);margin-bottom:.5rem" />
+        <button id="joinBtn" class="btn">Join / Create Room</button>
+        <p id="roomInfo" class="story-brief"></p>
+        <p id="shareLink" class="story-brief" style="word-break: break-all;"></p>
+
+        <h2>Pick Character</h2>
+        <div id="characterPick" class="character-cards"></div>
+
+        <div class="case-notes-block">
+          <h2>Your Case Notes</h2>
+          <ul id="notes" class="log"></ul>
+        </div>
+      </section>
+
+      <section class="board-wrap">
+        <div class="board-stage">
+          <div id="board" class="board" aria-label="Multiplayer board"></div>
+        </div>
+      </section>
+
+      <section class="panel right-panel">
+        <h2>Players</h2>
+        <p id="status" class="story-brief">Join a room to begin.</p>
+        <ul id="playersList" class="players"></ul>
+        <div class="dice-tray">
+          <div id="dieView" class="die"></div>
+          <p id="diceText" class="dice-status">Ready</p>
+        </div>
+        <button id="rollBtn" class="btn" disabled>Roll & Move</button>
+        <button id="accuseBtn" class="btn danger" disabled>Make Final Call</button>
+
+        <div class="evidence-block">
+          <h3>Your Evidence Board</h3>
+          <ul id="evidence" class="leads"></ul>
+        </div>
+      </section>
+    </main>
+
+    <div id="accuseModal" class="modal-backdrop hidden" aria-hidden="true">
+      <div class="modal-card" role="dialog" aria-modal="true">
+        <h2>Final Accusation</h2>
+        <label>Suspect</label>
+        <select id="suspectSel"></select>
+        <label>Object</label>
+        <select id="objectSel"></select>
+        <label>Apartment</label>
+        <select id="apartmentSel"></select>
+        <label>Motive</label>
+        <select id="motiveSel"></select>
+        <button id="submitAccuse" class="btn danger">Submit</button>
+        <button id="cancelAccuse" class="btn secondary">Cancel</button>
+      </div>
+    </div>
+
+    <script src="multiplayer-client.js"></script>
+  </body>
+</html>

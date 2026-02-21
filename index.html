@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Only Murders: Arconia Investigation</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Work+Sans:wght@400;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <button id="menuBtn" class="menu-btn" type="button">Game Setup</button>
+    <aside id="setupMenu" class="setup-menu">
+      <h2>Game Setup</h2>
+      <label for="playerCountSelect">Players</label>
+      <select id="playerCountSelect">
+        <option value="1">1 Player</option>
+        <option value="2">2 Players</option>
+        <option value="3" selected>3 Players</option>
+      </select>
+
+      <label for="difficultySelect">Difficulty</label>
+      <select id="difficultySelect">
+        <option value="casual">Casual</option>
+        <option value="detective" selected>Detective</option>
+        <option value="expert">Expert</option>
+      </select>
+
+      <h3>Character Cards</h3>
+      <p id="selectionHint" class="story-brief"></p>
+      <div id="characterCards" class="character-cards"></div>
+      <button id="newGameBtn" class="btn secondary">Start New Game</button>
+    </aside>
+
+    <main class="app">
+      <section class="panel left-panel">
+        <h1>Only Murders</h1>
+        <h2>Case Story</h2>
+        <p id="caseTitle" class="subtitle"></p>
+        <p id="caseBrief" class="story-brief"></p>
+        <ul id="storyBeats" class="hints"></ul>
+
+        <div class="case-notes-block">
+          <h2>Case Notes</h2>
+          <ul id="log" class="log"></ul>
+        </div>
+      </section>
+
+      <section class="board-wrap">
+        <div class="board-stage">
+          <div id="episodeDeckSlot" class="deck-slot deck-top-left"></div>
+          <div id="clueDeckSlot" class="deck-slot deck-top-right"></div>
+          <div id="actionDeckSlot" class="deck-slot deck-bottom-right"></div>
+          <div id="board" class="board" aria-label="Arconia four-sided board"></div>
+        </div>
+      </section>
+
+      <section class="panel right-panel">
+        <h2>Investigators</h2>
+        <div class="dice-tray">
+          <div id="diceVisual" class="die" aria-label="Dice animation"></div>
+          <p id="diceStatus" class="dice-status">Ready</p>
+        </div>
+        <button id="rollBtn" class="btn">Roll Die</button>
+        <div id="currentInvestigatorCard" class="current-investigator"></div>
+        <ul id="playersList" class="players"></ul>
+        <button id="callBtn" class="btn danger" disabled>Make Final Call</button>
+
+        <div class="evidence-block">
+          <h3>Evidence Board</h3>
+          <ul id="leadsList" class="leads"></ul>
+        </div>
+      </section>
+    </main>
+
+    <div id="accusationModal" class="modal-backdrop hidden" aria-hidden="true">
+      <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="accuseTitle">
+        <h2 id="accuseTitle">Final Accusation</h2>
+        <p>Solve all four parts in one call.</p>
+
+        <label for="suspectCallSelect">Suspect</label>
+        <select id="suspectCallSelect"></select>
+
+        <label for="objectCallSelect">Murder Object</label>
+        <select id="objectCallSelect"></select>
+
+        <label for="apartmentCallSelect">Apartment</label>
+        <select id="apartmentCallSelect"></select>
+
+        <label for="motiveCallSelect">Motive</label>
+        <select id="motiveCallSelect"></select>
+
+        <button id="submitCallBtn" class="btn danger">Confirm Final Call</button>
+        <button id="closeAccuseBtn" class="btn secondary">Cancel</button>
+      </div>
+    </div>
+
+    <div id="storyRevealModal" class="modal-backdrop hidden story-reveal-backdrop" aria-hidden="true">
+      <div class="modal-card story-reveal-card" role="dialog" aria-modal="true" aria-labelledby="storyRevealTitle">
+        <p class="story-reveal-kicker">Case Update</p>
+        <h2 id="storyRevealTitle">Developing Story</h2>
+        <p id="storyRevealText" class="story-reveal-text"></p>
+        <button id="storyRevealBtn" class="btn">Continue Investigation</button>
+      </div>
+    </div>
+
+    <div id="residentModal" class="modal-backdrop hidden resident-backdrop" aria-hidden="true">
+      <div class="modal-card resident-card" role="dialog" aria-modal="true" aria-labelledby="residentTitle">
+        <p class="resident-kicker">Resident Encounter</p>
+        <h2 id="residentTitle">Arconia Resident</h2>
+        <div id="residentPortrait" class="resident-portrait"></div>
+        <p id="residentQuote" class="resident-quote"></p>
+        <button id="residentContinueBtn" class="btn">Continue</button>
+      </div>
+    </div>
+
+    <script src="script.js"></script>
+  </body>
+</html>
