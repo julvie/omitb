@@ -58,6 +58,7 @@ const state = {
   reconnectAttempts: 0,
   reconnectTimer: null,
   shouldAutoReconnect: false,
+  heartbeatTimer: null,
   myScores: {
     suspect: Object.fromEntries(suspects.map((x) => [x, 0])),
     object: Object.fromEntries(objects.map((x) => [x, 0])),
@@ -235,6 +236,21 @@ function clearReconnectTimer() {
     window.clearTimeout(state.reconnectTimer);
     state.reconnectTimer = null;
   }
+}
+
+function stopHeartbeat() {
+  if (state.heartbeatTimer) {
+    window.clearInterval(state.heartbeatTimer);
+    state.heartbeatTimer = null;
+  }
+}
+
+function startHeartbeat() {
+  stopHeartbeat();
+  state.heartbeatTimer = window.setInterval(() => {
+    if (!state.ws || state.ws.readyState !== 1) return;
+    send({ type: 'ping', ts: Date.now() });
+  }, 15000);
 }
 
 function scheduleReconnect() {
@@ -537,6 +553,7 @@ function connectAndJoin(options = {}) {
   ws.addEventListener('open', () => {
     clearReconnectTimer();
     state.reconnectAttempts = 0;
+    startHeartbeat();
     send({ type: 'join', roomId, name, playerId: requestedPlayerId });
   });
 
@@ -679,15 +696,21 @@ function connectAndJoin(options = {}) {
       els.diceText.textContent = 'Ready';
       renderStatus();
     }
+
+    if (msg.type === 'pong') {
+      return;
+    }
   });
 
-  ws.addEventListener('close', () => {
+  ws.addEventListener('close', (event) => {
+    stopHeartbeat();
     state.ws = null;
     if (state.shouldAutoReconnect && state.roomId && state.playerName) {
+      logNote(`Socket closed (${event.code}). Attempting resume...`);
       scheduleReconnect();
       return;
     }
-    logNote('Disconnected from server. Reconnect to continue.');
+    logNote(`Disconnected from server (${event.code}). Reconnect to continue.`);
   });
 }
 
@@ -786,4 +809,5 @@ if (new URLSearchParams(location.search).get('room')) {
 window.addEventListener('beforeunload', () => {
   state.shouldAutoReconnect = false;
   clearReconnectTimer();
+  stopHeartbeat();
 });

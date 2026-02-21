@@ -214,6 +214,7 @@ function nextTurnPlayer(room) {
 }
 
 function send(ws, payload) {
+  if (!ws) return;
   if (ws.readyState === 1) ws.send(JSON.stringify(payload));
 }
 
@@ -472,6 +473,11 @@ wss.on('connection', (ws) => {
       room.chosenCharacters.add(charId);
       broadcastState(room);
       maybeStart(room);
+      return;
+    }
+
+    if (msg.type === 'ping') {
+      send(ws, { type: 'pong', ts: Date.now() });
       return;
     }
 
