@@ -122,10 +122,34 @@ function createStory(solution) {
     revealText: `Hidden transfers and private messages line up with ${solution.motive}. This murder was planned, not impulsive.`,
   };
 
+  const backstory = [
+    {
+      title: 'Backstory Fragment I',
+      unlockAtClues: 1,
+      text: `Three weeks earlier, a private dispute about ${solution.motive.toLowerCase()} started behind closed doors and never made it into official minutes.`,
+    },
+    {
+      title: 'Backstory Fragment II',
+      unlockAtClues: 3,
+      text: `The victim confronted someone near ${solution.apartment} after noticing repeated references to ${solution.object}.`,
+    },
+    {
+      title: 'Backstory Fragment III',
+      unlockAtClues: 5,
+      text: `A witness now confirms ${solution.suspect} changed routine right after the confrontation, suggesting planning before the murder night.`,
+    },
+    {
+      title: 'Backstory Fragment IV',
+      unlockAtClues: 7,
+      text: `Final link: motive pressure, location control, and the ${solution.object} timeline all intersect around ${solution.suspect}.`,
+    },
+  ];
+
   return {
     title: `Case: The ${solution.apartment} Silence`,
     brief: `${randomItem(openings)} ${randomItem(stakes)}`,
     beats: [beat1, beat2, beat3],
+    backstory,
   };
 }
 
@@ -163,6 +187,7 @@ function buildPublicState(room, viewerId) {
     turnPlayerName: turnPlayer ? turnPlayer.name : null,
     caseStory: room.story ? { title: room.story.title, brief: room.story.brief } : null,
     revealedStory: viewer ? viewer.revealedStory : [],
+    revealedBackstory: viewer ? viewer.revealedBackstory : [],
     players: Array.from(room.players.values()).map((p) => ({
       id: p.id,
       name: p.name,
@@ -217,6 +242,8 @@ function maybeStart(room) {
     player.cluesFound = 0;
     player.storyRevealIndex = 0;
     player.revealedStory = [];
+    player.backstoryRevealIndex = 0;
+    player.revealedBackstory = [];
   }
   room.turnOrder = Array.from(room.players.values()).map((p) => p.id);
   room.turnPlayerId = room.turnOrder[0] || null;
@@ -283,6 +310,18 @@ function maybeRevealStory(room, player) {
     player.storyRevealIndex += 1;
     player.revealedStory.push(reveal);
     send(player.ws, { type: 'story_reveal', data: reveal });
+  }
+}
+
+function maybeRevealBackstory(room, player) {
+  if (!room.story || !Array.isArray(room.story.backstory)) return;
+  while (player.backstoryRevealIndex < room.story.backstory.length) {
+    const nextFragment = room.story.backstory[player.backstoryRevealIndex];
+    if (player.cluesFound < nextFragment.unlockAtClues) break;
+    const reveal = { title: nextFragment.title, text: nextFragment.text };
+    player.backstoryRevealIndex += 1;
+    player.revealedBackstory.push(reveal);
+    send(player.ws, { type: 'backstory_reveal', data: reveal });
   }
 }
 
@@ -364,6 +403,8 @@ wss.on('connection', (ws) => {
           cluesFound: 0,
           storyRevealIndex: 0,
           revealedStory: [],
+          backstoryRevealIndex: 0,
+          revealedBackstory: [],
           ws,
         };
         room.players.set(player.id, player);
@@ -372,6 +413,8 @@ wss.on('connection', (ws) => {
         player.ws = ws;
         if (!Array.isArray(player.revealedStory)) player.revealedStory = [];
         if (!Number.isInteger(player.storyRevealIndex)) player.storyRevealIndex = player.revealedStory.length;
+        if (!Array.isArray(player.revealedBackstory)) player.revealedBackstory = [];
+        if (!Number.isInteger(player.backstoryRevealIndex)) player.backstoryRevealIndex = player.revealedBackstory.length;
         if (!Number.isInteger(player.cluesFound)) player.cluesFound = 0;
       }
 
@@ -446,6 +489,7 @@ wss.on('connection', (ws) => {
         send(ws, { type: 'resident_encounter', data: clue.encounterData });
       }
       maybeRevealStory(room, player);
+      maybeRevealBackstory(room, player);
       room.turnPlayerId = nextTurnPlayer(room);
       broadcastState(room);
       return;

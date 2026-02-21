@@ -38,6 +38,7 @@ const state = {
   ws: null,
   roomId: null,
   playerId: null,
+  playerName: '',
   started: false,
   winnerId: null,
   turnPlayerId: null,
@@ -48,11 +49,15 @@ const state = {
   isRolling: false,
   caseStory: null,
   revealedStory: [],
+  revealedBackstory: [],
   storyTypeTimer: null,
   storyTypeText: '',
   storyTypeIndex: 0,
   isStoryRevealActive: false,
   isEncounterModalActive: false,
+  reconnectAttempts: 0,
+  reconnectTimer: null,
+  shouldAutoReconnect: false,
   myScores: {
     suspect: Object.fromEntries(suspects.map((x) => [x, 0])),
     object: Object.fromEntries(objects.map((x) => [x, 0])),
@@ -198,6 +203,25 @@ function updateScreenMode() {
   const pickedCharacter = !!(state.me && state.me.characterId);
   els.lobbyScreen.classList.toggle('screen-hidden', pickedCharacter);
   els.gameScreen.classList.toggle('screen-hidden', !pickedCharacter);
+}
+
+function clearReconnectTimer() {
+  if (state.reconnectTimer) {
+    window.clearTimeout(state.reconnectTimer);
+    state.reconnectTimer = null;
+  }
+}
+
+function scheduleReconnect() {
+  if (!state.shouldAutoReconnect || !state.roomId || !state.playerName) return;
+  if (state.reconnectTimer) return;
+  const delay = Math.min(10000, 1200 * (2 ** state.reconnectAttempts));
+  state.reconnectAttempts += 1;
+  logNote(`Connection lost. Reconnecting in ${(delay / 1000).toFixed(1)}s...`);
+  state.reconnectTimer = window.setTimeout(() => {
+    state.reconnectTimer = null;
+    connectAndJoin({ reuseStored: true, isReconnect: true });
+  }, delay);
 }
 
 function randomId(length = 6) {
@@ -385,6 +409,11 @@ function renderStory() {
     item.textContent = beat.text;
     els.storyBeats.appendChild(item);
   });
+  state.revealedBackstory.forEach((fragment) => {
+    const item = document.createElement('li');
+    item.textContent = `Backstory: ${fragment.text}`;
+    els.storyBeats.appendChild(item);
+  });
 }
 
 function renderStatus() {
@@ -441,30 +470,45 @@ function send(payload) {
   state.ws.send(JSON.stringify(payload));
 }
 
-function connectAndJoin() {
+function connectAndJoin(options = {}) {
+  const { reuseStored = false, isReconnect = false } = options;
+  if (state.ws && (state.ws.readyState === 0 || state.ws.readyState === 1)) return;
+
   const params = new URLSearchParams(location.search);
   const roomFromUrl = params.get('room');
-  const roomId = (roomFromUrl || randomId(6)).toUpperCase();
-  const name = (els.nameInput.value || 'Player').trim().slice(0, 24) || 'Player';
-  state.caseStory = null;
-  state.revealedStory = [];
-  state.players = [];
-  state.chosenCharacters = [];
-  state.winnerId = null;
-  state.started = false;
-  state.isStoryRevealActive = false;
-  state.isEncounterModalActive = false;
-  clearStoryTypeTimer();
-  els.storyRevealModal.classList.add('hidden');
-  els.storyRevealModal.setAttribute('aria-hidden', 'true');
-  els.residentModal.classList.add('hidden');
-  els.residentModal.setAttribute('aria-hidden', 'true');
+  const roomId = reuseStored
+    ? state.roomId
+    : (roomFromUrl || randomId(6)).toUpperCase();
+  const name = reuseStored
+    ? state.playerName
+    : ((els.nameInput.value || 'Player').trim().slice(0, 24) || 'Player');
+  if (!roomId || !name) return;
+
+  state.playerName = name;
+  if (!reuseStored) {
+    state.caseStory = null;
+    state.revealedStory = [];
+    state.revealedBackstory = [];
+    state.players = [];
+    state.chosenCharacters = [];
+    state.winnerId = null;
+    state.started = false;
+    state.isStoryRevealActive = false;
+    state.isEncounterModalActive = false;
+    clearStoryTypeTimer();
+    els.storyRevealModal.classList.add('hidden');
+    els.storyRevealModal.setAttribute('aria-hidden', 'true');
+    els.residentModal.classList.add('hidden');
+    els.residentModal.setAttribute('aria-hidden', 'true');
+  }
 
   const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
   const ws = new WebSocket(`${protocol}//${location.host}`);
   state.ws = ws;
 
   ws.addEventListener('open', () => {
+    clearReconnectTimer();
+    state.reconnectAttempts = 0;
     send({ type: 'join', roomId, name });
   });
 
@@ -480,7 +524,7 @@ function connectAndJoin() {
       if (!new URLSearchParams(location.search).get('room')) {
         history.replaceState(null, '', `/?room=${msg.roomId}`);
       }
-      logNote(`Joined room ${msg.roomId}.`);
+      logNote(isReconnect ? `Reconnected to room ${msg.roomId}.` : `Joined room ${msg.roomId}.`);
       render();
       return;
     }
@@ -495,6 +539,7 @@ function connectAndJoin() {
       state.chosenCharacters = msg.data.chosenCharacters;
       state.caseStory = msg.data.caseStory || null;
       state.revealedStory = msg.data.revealedStory || [];
+      state.revealedBackstory = msg.data.revealedBackstory || [];
       if (state.turnPlayerId !== state.playerId) {
         state.isRolling = false;
       }
@@ -556,6 +601,16 @@ function connectAndJoin() {
       return;
     }
 
+    if (msg.type === 'backstory_reveal') {
+      const fragment = msg.data;
+      if (!state.revealedBackstory.some((entry) => entry.title === fragment.title && entry.text === fragment.text)) {
+        state.revealedBackstory.push(fragment);
+      }
+      logNote(`${fragment.title}: ${fragment.text}`);
+      renderStory();
+      return;
+    }
+
     if (msg.type === 'resident_encounter') {
       showResidentEncounterModal(msg.data || {});
       return;
@@ -597,6 +652,11 @@ function connectAndJoin() {
   });
 
   ws.addEventListener('close', () => {
+    state.ws = null;
+    if (state.shouldAutoReconnect && state.roomId && state.playerName) {
+      scheduleReconnect();
+      return;
+    }
     logNote('Disconnected from server. Reconnect to continue.');
   });
 }
@@ -631,6 +691,7 @@ els.joinBtn.addEventListener('click', () => {
     logNote('Already connected.');
     return;
   }
+  state.shouldAutoReconnect = true;
   connectAndJoin();
 });
 
@@ -680,5 +741,11 @@ setupDiceVisual();
 render();
 
 if (new URLSearchParams(location.search).get('room')) {
+  state.shouldAutoReconnect = true;
   connectAndJoin();
 }
+
+window.addEventListener('beforeunload', () => {
+  state.shouldAutoReconnect = false;
+  clearReconnectTimer();
+});
