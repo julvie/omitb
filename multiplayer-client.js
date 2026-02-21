@@ -551,6 +551,10 @@ function connectAndJoin(options = {}) {
   state.ws = ws;
 
   ws.addEventListener('open', () => {
+    if (state.ws !== ws) {
+      try { ws.close(); } catch {}
+      return;
+    }
     clearReconnectTimer();
     state.reconnectAttempts = 0;
     startHeartbeat();
@@ -558,6 +562,7 @@ function connectAndJoin(options = {}) {
   });
 
   ws.addEventListener('message', (event) => {
+    if (state.ws !== ws) return;
     const msg = JSON.parse(event.data);
 
     if (msg.type === 'joined') {
@@ -703,6 +708,7 @@ function connectAndJoin(options = {}) {
   });
 
   ws.addEventListener('close', (event) => {
+    if (state.ws !== ws) return;
     stopHeartbeat();
     state.ws = null;
     if (state.shouldAutoReconnect && state.roomId && state.playerName) {
