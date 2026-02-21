@@ -155,7 +155,8 @@ function renderPlayers() {
     left.textContent = `${p.name} ${p.characterId ? `(${p.characterId})` : '(choosing...)'}`;
     const right = document.createElement('span');
     const turnTag = p.id === state.turnPlayerId ? ' • TURN' : '';
-    right.textContent = `${p.connected ? 'Online' : 'Offline'}${turnTag}`;
+    const outTag = p.eliminated ? ' • OUT' : '';
+    right.textContent = `${p.connected ? 'Online' : 'Offline'}${turnTag}${outTag}`;
     li.append(left, right);
     els.playersList.appendChild(li);
   });
@@ -227,6 +228,8 @@ function renderStatus() {
   } else if (state.winnerId) {
     const winner = state.players.find((p) => p.id === state.winnerId);
     els.status.textContent = `Case closed. Winner: ${winner ? winner.name : 'Unknown'}.`;
+  } else if (state.me && state.me.eliminated) {
+    els.status.textContent = 'You are eliminated. Keep watching while others investigate.';
   } else {
     const mine = state.turnPlayerId === state.playerId;
     els.status.textContent = mine
@@ -240,8 +243,9 @@ function renderStatus() {
     state.isRolling ||
     !state.me ||
     !state.me.characterId ||
+    !!state.me.eliminated ||
     state.turnPlayerId !== state.playerId;
-  els.accuseBtn.disabled = !state.started || !!state.winnerId || !state.me || !state.me.characterId;
+  els.accuseBtn.disabled = !state.started || !!state.winnerId || !state.me || !state.me.characterId || !!state.me.eliminated;
 }
 
 function render() {
@@ -342,12 +346,24 @@ function connectAndJoin() {
 
     if (msg.type === 'accuse_result') {
       logNote(msg.message);
+      renderStatus();
+      renderPlayers();
+      return;
+    }
+
+    if (msg.type === 'player_eliminated') {
+      const mine = msg.playerId === state.playerId;
+      logNote(mine ? 'You have been eliminated from this case.' : `${msg.playerName} has been eliminated.`);
       return;
     }
 
     if (msg.type === 'game_over') {
-      const winnerIsMe = msg.winnerId === state.playerId;
-      logNote(winnerIsMe ? 'You solved the case first. You win.' : `${msg.winnerName} solved the case first.`);
+      if (!msg.winnerId) {
+        logNote(msg.reason || 'All investigators were eliminated. Case unsolved.');
+      } else {
+        const winnerIsMe = msg.winnerId === state.playerId;
+        logNote(winnerIsMe ? 'You solved the case first. You win.' : `${msg.winnerName} solved the case first.`);
+      }
       state.winnerId = msg.winnerId;
       render();
       return;

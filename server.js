@@ -77,6 +77,7 @@ function buildPublicState(room, viewerId) {
       position: p.position,
       connected: p.connected,
       hasAccused: p.hasAccused,
+      eliminated: p.eliminated,
     })),
     chosenCharacters: Array.from(room.chosenCharacters),
     characterPool: characters,
@@ -89,9 +90,9 @@ function nextTurnPlayer(room) {
   for (let i = 1; i <= room.turnOrder.length; i += 1) {
     const candidateId = room.turnOrder[(currentIndex + i) % room.turnOrder.length];
     const candidate = room.players.get(candidateId);
-    if (candidate && candidate.characterId && candidate.connected) return candidateId;
+    if (candidate && candidate.characterId && candidate.connected && !candidate.eliminated) return candidateId;
   }
-  return room.turnPlayerId;
+  return null;
 }
 
 function send(ws, payload) {
@@ -212,6 +213,7 @@ wss.on('connection', (ws) => {
           position: 0,
           connected: true,
           hasAccused: false,
+          eliminated: false,
           ws,
         };
         room.players.set(player.id, player);
@@ -270,6 +272,10 @@ wss.on('connection', (ws) => {
     if (msg.type === 'roll_move') {
       if (!room.started || room.winnerId) return;
       if (!player.characterId) return;
+      if (player.eliminated) {
+        send(ws, { type: 'error', message: 'You are eliminated and cannot take turns.' });
+        return;
+      }
       if (room.turnPlayerId !== player.id) {
         send(ws, { type: 'error', message: "Not your turn." });
         return;
@@ -288,6 +294,10 @@ wss.on('connection', (ws) => {
 
     if (msg.type === 'accuse') {
       if (!room.started || room.winnerId) return;
+      if (player.eliminated) {
+        send(ws, { type: 'error', message: 'You are eliminated and cannot accuse.' });
+        return;
+      }
       const guess = msg.guess || {};
       const correct =
         guess.suspect === room.solution.suspect &&
@@ -301,7 +311,17 @@ wss.on('connection', (ws) => {
         broadcastState(room);
       } else {
         player.hasAccused = true;
-        send(ws, { type: 'accuse_result', ok: false, message: 'Incorrect accusation. Keep investigating.' });
+        player.eliminated = true;
+        send(ws, { type: 'accuse_result', ok: false, message: 'Incorrect accusation. Sudden death: you are eliminated.' });
+        broadcast(room, { type: 'player_eliminated', playerId: player.id, playerName: player.name, characterId: player.characterId });
+        if (room.turnPlayerId === player.id) {
+          room.turnPlayerId = nextTurnPlayer(room);
+        }
+        const activePlayers = Array.from(room.players.values()).filter((p) => p.characterId && p.connected && !p.eliminated);
+        if (activePlayers.length === 0) {
+          room.winnerId = null;
+          broadcast(room, { type: 'game_over', winnerId: null, reason: 'All investigators were eliminated. Case unsolved.' });
+        }
         broadcastState(room);
       }
     }
